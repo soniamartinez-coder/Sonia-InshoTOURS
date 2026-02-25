@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InshosTOURS | Gestió de Reserves</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue.js 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+
+        :root {
+            --ins-dark: #002B61;
+            --ins-light: #00AEEF;
+            --ins-bg: #F0F4F8; /* Fons no blanc per defecte */
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--ins-bg);
+            margin: 0;
+            color: #1a202c;
+        }
+
+        [v-cloak] { display: none; }
+
+        .tour-card:hover {
+            transform: translateY(-8px);
+        }
+
+        .custom-gradient {
+            background: linear-gradient(135deg, var(--ins-dark) 0%, #004494 100%);
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(48%) sepia(91%) border-radius(5px);
+            cursor: pointer;
+        }
+
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+    </style>
+</head>
+<body>
+
+<div id="app" v-cloak>
+    <!-- Header / Nav -->
+    <nav class="bg-[#002B61] text-white sticky top-0 z-50 shadow-lg border-b border-blue-400/20">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div @click="selectedTour = null" class="flex items-center gap-2 cursor-pointer group">
+                <div class="bg-[#00AEEF] p-2 rounded-xl group-hover:rotate-12 transition-transform">
+                    <i data-lucide="compass" class="w-6 h-6 text-white"></i>
+                </div>
+                <h1 class="text-2xl font-extrabold tracking-tighter italic">Inshos<span class="text-[#00AEEF]">TOURS</span></h1>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <div class="flex bg-white/10 rounded-lg p-1 border border-white/20">
+                    <button v-for="l in ['ca', 'es', 'en', 'fr']" 
+                            @click="lang = l"
+                            :class="lang === l ? 'bg-[#00AEEF] text-white' : 'text-blue-100 hover:bg-white/5'"
+                            class="px-3 py-1 rounded-md text-[10px] font-bold uppercase transition-all">
+                        {{ l }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main v-if="!selectedTour" class="animate-in fade-in duration-500">
+        <!-- Hero Section -->
+        <header class="custom-gradient pt-16 pb-32 px-6">
+            <div class="max-w-4xl mx-auto text-center">
+                <h2 class="text-4xl md:text-6xl font-extrabold text-white mb-6 leading-tight tracking-tight">
+                    {{ t.heroTitle }}
+                </h2>
+                <p class="text-blue-100 text-lg mb-10 opacity-80">{{ t.heroSub }}</p>
+
+                <!-- Search Bar -->
+                <div class="bg-white p-2 rounded-2xl shadow-2xl flex flex-col md:flex-row gap-2">
+                    <div class="flex-1 flex items-center px-4 py-3 gap-3">
+                        <i data-lucide="search" class="text-[#00AEEF] w-5 h-5"></i>
+                        <input v-model="searchQuery" type="text" :placeholder="t.placeholder" class="w-full outline-none font-semibold text-slate-700">
+                    </div>
+                    <div class="md:w-px h-px md:h-8 bg-slate-200 self-center"></div>
+                    <div class="flex items-center px-4 py-3 gap-3">
+                        <i data-lucide="calendar" class="text-[#00AEEF] w-5 h-5"></i>
+                        <input v-model="filterDate" type="date" :min="today" class="outline-none font-semibold text-slate-600 cursor-pointer bg-transparent">
+                    </div>
+                    <button class="bg-[#002B61] text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-800 transition-all flex items-center justify-center">
+                        <i data-lucide="map" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Categories -->
+        <section class="max-w-7xl mx-auto px-6 -mt-12">
+            <div class="flex gap-3 overflow-x-auto no-scrollbar pb-4">
+                <button v-for="cat in categories" 
+                        @click="activeCategory = cat"
+                        :class="activeCategory === cat ? 'bg-[#00AEEF] text-white shadow-lg shadow-blue-500/30 scale-105' : 'bg-white text-slate-500 hover:bg-slate-50'"
+                        class="px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all whitespace-nowrap shadow-sm border border-slate-100">
+                    {{ t['cat' + cat] || cat }}
+                </button>
+            </div>
+
+            <!-- Tours Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-8 pb-20">
+                <div v-for="tour in filteredTours" :key="tour.id" 
+                     @click="openTour(tour)"
+                     class="tour-card bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 cursor-pointer transition-all duration-300 flex flex-col">
+                    <div class="relative h-56">
+                        <img :src="tour.img" class="w-full h-full object-cover" :alt="tour.name">
+                        <div class="absolute top-4 left-4 bg-[#00AEEF] text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter">
+                            {{ tour.tag }}
+                        </div>
+                    </div>
+                    <div class="p-6 flex-1 flex flex-col">
+                        <div class="flex items-center gap-1 text-[10px] text-[#00AEEF] font-bold uppercase mb-2">
+                            <i data-lucide="map-pin" class="w-3 h-3"></i> {{ tour.location }}
+                        </div>
+                        <h3 class="text-xl font-bold text-[#002B61] mb-4 leading-snug">{{ tour.name }}</h3>
+                        <p class="text-slate-500 text-xs mb-6 line-clamp-2">{{ tour.desc }}</p>
+                        
+                        <div class="mt-auto flex justify-between items-center pt-4 border-t border-slate-50">
+                            <div>
+                                <span class="text-[10px] text-slate-400 block uppercase font-bold">{{ t.from }}</span>
+                                <span class="text-2xl font-extrabold text-[#002B61]">{{ tour.price }}€</span>
+                            </div>
+                            <div class="bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 flex items-center gap-2">
+                                <i data-lucide="clock" class="w-4 h-4 text-[#00AEEF]"></i>
+                                <span class="text-xs font-bold text-slate-600">{{ tour.duration }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div v-if="filteredTours.length === 0" class="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200 mb-20">
+                <i data-lucide="frown" class="w-12 h-12 text-slate-300 mx-auto mb-4"></i>
+                <p class="text-slate-400 font-bold">{{ t.noResults }}</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Detail Page -->
+    <main v-else class="max-w-6xl mx-auto px-6 py-12 animate-in slide-in-from-bottom-8 duration-500">
+        <button @click="selectedTour = null" class="flex items-center gap-2 text-slate-400 hover:text-[#002B61] font-bold text-sm mb-8 transition-colors">
+            <i data-lucide="chevron-left" class="w-5 h-5"></i> {{ t.back }}
+        </button>
+
+        <div class="bg-white rounded-[3rem] shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 border border-slate-100">
+            <!-- Image Section -->
+            <div class="lg:col-span-5 relative min-h-[400px]">
+                <img :src="selectedTour.img" class="absolute inset-0 w-full h-full object-cover" :alt="selectedTour.name">
+                <div class="absolute inset-0 bg-gradient-to-t from-[#002B61] to-transparent opacity-60"></div>
+                <div class="absolute bottom-10 left-10 text-white">
+                    <span class="bg-[#00AEEF] px-4 py-1 rounded-full text-[10px] font-black uppercase mb-4 inline-block">VIP Experience</span>
+                    <h2 class="text-4xl font-extrabold tracking-tight mb-2">{{ selectedTour.name }}</h2>
+                    <p class="flex items-center gap-2 text-sm opacity-80"><i data-lucide="map-pin" class="w-4 h-4"></i> {{ selectedTour.location }}</p>
+                </div>
+            </div>
+
+            <!-- Booking Section -->
+            <div class="lg:col-span-7 p-8 lg:p-14">
+                <div class="mb-10">
+                    <h4 class="text-[10px] font-black text-[#00AEEF] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                        <i data-lucide="zap" class="w-4 h-4"></i> {{ t.itinerary }}
+                    </h4>
+                    <ul class="space-y-4">
+                        <li v-for="(item, idx) in selectedTour.itinerary" :key="idx" class="flex items-start gap-4">
+                            <span class="w-6 h-6 rounded-full bg-blue-50 text-[#00AEEF] text-[10px] flex items-center justify-center font-bold flex-shrink-0 mt-1 border border-blue-100">
+                                {{ idx + 1 }}
+                            </span>
+                            <span class="text-slate-600 font-semibold text-sm">{{ item }}</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase mb-3">{{ t.dateLabel }}</label>
+                            <input type="date" v-model="bookingDate" :min="today" class="w-full bg-white px-4 py-3 rounded-xl border border-slate-200 outline-none font-bold text-[#002B61]">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase mb-3">{{ t.paxLabel }}</label>
+                            <div class="flex items-center bg-white rounded-xl border border-slate-200 p-1">
+                                <button @click="bookingPax = Math.max(1, bookingPax - 1)" class="w-10 h-10 rounded-lg hover:bg-slate-50 font-bold">-</button>
+                                <span class="flex-1 text-center font-bold text-[#002B61]">{{ bookingPax }}</span>
+                                <button @click="bookingPax++" class="w-10 h-10 rounded-lg hover:bg-slate-50 font-bold">+</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col md:flex-row items-center justify-between gap-6 border-t border-slate-200 pt-8">
+                        <div class="text-center md:text-left">
+                            <span class="text-[10px] text-slate-400 font-black uppercase tracking-widest block">{{ t.total }}</span>
+                            <span class="text-5xl font-extrabold text-[#002B61] tracking-tighter">{{ selectedTour.price * bookingPax }}€</span>
+                        </div>
+                        <button @click="redirectReservation" :disabled="!bookingDate"
+                                class="w-full md:w-auto bg-[#00AEEF] text-white px-12 py-5 rounded-2xl font-extrabold text-lg hover:bg-[#002B61] transition-all shadow-xl shadow-blue-500/20 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-3">
+                            {{ t.bookBtn }} {{ selectedTour.provider }} <i data-lucide="external-link" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                    <p class="text-center mt-4 text-[9px] text-slate-400 uppercase font-bold">{{ t.secureNote }}</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-[#001D47] text-white py-20 px-6">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
+            <div class="text-center md:text-left">
+                <h3 class="text-2xl font-black italic mb-4">Inshos<span class="text-[#00AEEF]">TOURS</span></h3>
+                <p class="text-blue-100/50 text-xs max-w-xs">Optimitzant la teva logística de viatges per tot el món amb reserves segures i temps garantit.</p>
+            </div>
+            <div class="flex flex-wrap justify-center gap-8 text-[10px] font-black uppercase tracking-[0.3em] text-blue-400">
+                <span>© 2024 Inshos Global</span>
+                <a href="#" class="hover:text-white transition-colors">Privacy Policy</a>
+                <a href="#" class="hover:text-white transition-colors">Terms of Service</a>
+            </div>
+        </div>
+    </footer>
+</div>
+
+<script>
+    const { createApp, ref, computed, onMounted, watch } = Vue;
+
+    createApp({
+        setup() {
+            const lang = ref('ca');
+            const searchQuery = ref('');
+            const activeCategory = ref('All');
+            const selectedTour = ref(null);
+            const bookingDate = ref('');
+            const bookingPax = ref(2);
+            const filterDate = ref('');
+
+            const categories = ['All', 'Espanya', 'Europa', 'Amèrica', 'Història'];
+
+            const translations = {
+                ca: {
+                    heroTitle: "Destinacions mundials, rutes optimitzades.",
+                    heroSub: "Gestió logística per a les visites més icòniques del món.",
+                    placeholder: "On vols anar? (Normandia, Auschwitz, Las Vegas...)",
+                    catAll: "Tots", catEspanya: "Espanya", catEuropa: "Europa", catAmèrica: "Amèrica", catHistòria: "Història",
+                    from: "Des de", duration: "Durada", bookBtn: "Reservar a", back: "Tornar",
+                    itinerary: "Itinerari optimitzat (Temps real)", dateLabel: "Data de visita", paxLabel: "Viatgers",
+                    total: "Import Total", secureNote: "Redirecció segura cap al proveïdor oficial",
+                    noResults: "No s'han trobat rutes per aquesta cerca"
+                },
+                es: {
+                    heroTitle: "Destinos mundiales, rutas optimizadas.",
+                    heroSub: "Gestión logística para las visitas más icónicas del mundo.",
+                    placeholder: "¿A dónde quieres ir? (Normandía, Auschwitz, Las Vegas...)",
+                    catAll: "Todos", catEspanya: "España", catEuropa: "Europa", catAmèrica: "América", catHistòria: "Historia",
+                    from: "Desde", duration: "Duración", bookBtn: "Reservar en", back: "Volver",
+                    itinerary: "Itinerario optimizado (Tiempo real)", dateLabel: "Fecha de visita", paxLabel: "Viajeros",
+                    total: "Importe Total", secureNote: "Redirección segura al proveedor oficial",
+                    noResults: "No se han encontrado rutas para esta búsqueda"
+                },
+                en: {
+                    heroTitle: "World destinations, optimized routes.",
+                    heroSub: "Logistics management for the world's most iconic visits.",
+                    placeholder: "Where to? (Normandy, Auschwitz, Las Vegas...)",
+                    catAll: "All", catEspanya: "Spain", catEuropa: "Europe", catAmèrica: "Americas", catHistòria: "History",
+                    from: "From", duration: "Duration", bookBtn: "Book on", back: "Back",
+                    itinerary: "Optimized Itinerary (Live)", dateLabel: "Visit Date", paxLabel: "Travelers",
+                    total: "Total Price", secureNote: "Secure redirection to official provider",
+                    noResults: "No tours found for this search"
+                },
+                fr: {
+                    heroTitle: "Destinations mondiales, trajets optimisés.",
+                    heroSub: "Gestion logistique pour les visites les plus emblématiques.",
+                    placeholder: "Où allez-vous ? (Normandie, Auschwitz, Las Vegas...)",
+                    catAll: "Tous", catEspanya: "Espagne", catEuropa: "Europe", catAmèrica: "Amérique", catHistòria: "Histoire",
+                    from: "À partir de", duration: "Durée", bookBtn: "Réserver sur", back: "Retour",
+                    itinerary: "Itinéraire optimisé (Temps réel)", dateLabel: "Date de visite", paxLabel: "Voyageurs",
+                    total: "Prix Total", secureNote: "Redirection sécurisée vers le site officiel",
+                    noResults: "Aucun circuit trouvé"
+                }
+            };
+
+            const tours = [
+                { 
+                    id: 1, 
+                    name: "Memorial Auschwitz-Birkenau", 
+                    location: "Cracòvia, Polònia", 
+                    tag: "Memòria Històrica",
+                    category: "Història", 
+                    price: 45, 
+                    duration: "7h", 
+                    img: "https://images.unsplash.com/photo-1598910404369-026f7847c945?w=800",
+                    provider: "Viator",
+                    path: "Auschwitz-Birkenau",
+                    itinerary: ["Sortida des de Cracòvia centre", "Auschwitz I (Exposició permanent)", "Auschwitz II-Birkenau (Camps d'extermini)", "Temps de reflexió i retorn"],
+                    desc: "La visita més completa amb guia oficial per comprendre la magnitud de l'Holocaust."
+                },
+                { 
+                    id: 2, 
+                    name: "Desembarcament Normandia (D-Day)", 
+                    location: "Normandia, França", 
+                    tag: "Història Militar",
+                    category: "Història", 
+                    price: 155, 
+                    duration: "12h", 
+                    img: "https://images.unsplash.com/photo-1590424745343-4c5990289a20?w=800",
+                    provider: "TourRadar",
+                    path: "Normandy-D-Day",
+                    itinerary: ["Omaha Beach", "Cementiri Americà de Colleville", "Pointe du Hoc", "Museu Arromanches"],
+                    desc: "Recorregut pels escenaris clau que van canviar el curs de la 2a Guerra Mundial."
+                },
+                { 
+                    id: 3, 
+                    name: "New York Manhattan & Liberty", 
+                    location: "Nova York, EUA", 
+                    tag: "Iconic City",
+                    category: "Amèrica", 
+                    price: 95, 
+                    duration: "6h", 
+                    img: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800",
+                    provider: "Viator",
+                    path: "New-York-City",
+                    itinerary: ["Ferry a l'Estàtua de la Llibertat", "Ellis Island (Museu)", "Battery Park", "Wall Street & 9/11 Memorial"],
+                    desc: "Sincronització perfecta per veure els símbols de NY sense cues."
+                },
+                { 
+                    id: 4, 
+                    name: "Memorial Camp Dachau", 
+                    location: "Munic, Alemanya", 
+                    tag: "Història",
+                    category: "Història", 
+                    price: 35, 
+                    duration: "5h", 
+                    img: "https://images.unsplash.com/photo-1558285549-0e0600a74706?w=800",
+                    provider: "Viator",
+                    path: "Dachau-Memorial",
+                    itinerary: ["Transport des de Munic", "Memorial Principal", "Barracons restaurats", "Crematori i Memorial Religiós"],
+                    desc: "Visita al primer camp de concentració nazi a Alemanya."
+                },
+                { 
+                    id: 5, 
+                    name: "Grand Canyon Helicopter Tour", 
+                    location: "Las Vegas, EUA", 
+                    tag: "Aventura",
+                    category: "Amèrica", 
+                    price: 320, 
+                    duration: "4h", 
+                    img: "https://images.unsplash.com/photo-1473442240418-452f03b7ae40?w=800",
+                    provider: "TourRadar",
+                    path: "Grand-Canyon",
+                    itinerary: ["Check-in a Las Vegas Strip", "Vol panoràmic Presa Hoover", "Aterratge al Canyon", "Brindis i vol de retorn"],
+                    desc: "Temps optimitzat per veure una meravella natural en temps rècord."
+                },
+                { 
+                    id: 6, 
+                    name: "Barcelona Modernisme & Gaudí", 
+                    location: "Barcelona, Espanya", 
+                    tag: "Arquitectura",
+                    category: "Espanya", 
+                    price: 60, 
+                    duration: "4h", 
+                    img: "https://images.unsplash.com/photo-1583422409516-2895a77efded?w=800",
+                    provider: "Viator",
+                    path: "Barcelona-Gaudí",
+                    itinerary: ["Sagrada Família (Interior)", "Façana Casa Batlló", "Park Güell (Zona Monumental)"],
+                    desc: "Accés sense cues a les obres mestres d'Antoni Gaudí."
+                },
+                { 
+                    id: 7, 
+                    name: "California Highway 1 Explorer", 
+                    location: "Califòrnia, EUA", 
+                    tag: "Road Trip",
+                    category: "Amèrica", 
+                    price: 185, 
+                    duration: "10h", 
+                    img: "https://images.unsplash.com/photo-1506197348621-c481814b9a44?w=800",
+                    provider: "TourRadar",
+                    path: "California-Coastal",
+                    itinerary: ["San Francisco", "Monterey Bay", "17-Mile Drive", "Carmel-by-the-Sea"],
+                    desc: "La millor ruta costanera del Pacífic amb guia expert."
+                },
+                { 
+                    id: 8, 
+                    name: "Madrid del Prado a los Austrias", 
+                    location: "Madrid, Espanya", 
+                    tag: "Cultura",
+                    category: "Espanya", 
+                    price: 55, 
+                    duration: "5h", 
+                    img: "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=800",
+                    provider: "Viator",
+                    path: "Madrid-Prado",
+                    itinerary: ["Museu del Prado (Highlights)", "Paseo del Arte", "Madrid de los Austrias", "Plaza Mayor"],
+                    desc: "Optimització de la visita per cobrir art i història en un sol matí."
+                }
+            ];
+
+            const t = computed(() => translations[lang.value]);
+
+            const filteredTours = computed(() => {
+                const query = searchQuery.value.toLowerCase();
+                return tours.filter(tour => {
+                    const matchSearch = tour.name.toLowerCase().includes(query) || 
+                                      tour.location.toLowerCase().includes(query) ||
+                                      tour.tag.toLowerCase().includes(query);
+                    const matchCat = activeCategory.value === 'All' || tour.category === activeCategory.value;
+                    return matchSearch && matchCat;
+                });
+            });
+
+            const openTour = (tour) => {
+                selectedTour.value = tour;
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                setTimeout(() => lucide.createIcons(), 50);
+            };
+
+            const redirectReservation = () => {
+                const tour = selectedTour.value;
+                const searchStr = encodeURIComponent(tour.path);
+                const url = tour.provider === 'Viator' 
+                    ? `https://www.viator.com/search/${searchStr}?mcid=56757` 
+                    : `https://www.tourradar.com/search?q=${searchStr}`;
+                window.open(url, '_blank');
+            };
+
+            onMounted(() => {
+                lucide.createIcons();
+            });
+
+            watch([selectedTour, searchQuery, activeCategory, lang], () => {
+                setTimeout(() => lucide.createIcons(), 100);
+            });
+
+            return {
+                lang, searchQuery, activeCategory, selectedTour, categories, t,
+                filteredTours, openTour, redirectReservation, bookingDate, bookingPax, filterDate,
+                today: new Date().toISOString().split('T')[0]
+            };
+        }
+    }).mount('#app');
+</script>
+
+</body>
+</html>
